@@ -769,11 +769,18 @@ async function forwardRequest(request, targetUrl) {
     const filteredHeaders = filterRequestHeaders(request.headers);
 
     // Create proxy request
-    const proxyRequest = new Request(targetUrl, {
+    const requestInit = {
       method: request.method,
       headers: filteredHeaders,
       body: request.method !== 'GET' && request.method !== 'HEAD' ? request.body : null
-    });
+    };
+
+    // Add duplex option when body is present (required in some environments)
+    if (requestInit.body) {
+      requestInit.duplex = 'half';
+    }
+
+    const proxyRequest = new Request(targetUrl, requestInit);
 
     // Forward the request to target server
     const response = await fetch(proxyRequest);
