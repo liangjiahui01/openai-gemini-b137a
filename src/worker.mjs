@@ -31,6 +31,9 @@ export default {
           assert(request.method === "GET");
           return handleModels(apiKey)
             .catch(errHandler);
+        case pathname.startsWith("/proxy"):
+          return handleProxy(request, apiKey)
+            .catch(errHandler);
         default:
           throw new HttpError("404 Not Found", 404);
       }
@@ -643,5 +646,148 @@ function toOpenAiStreamFlush (controller) {
       controller.enqueue(sseline(obj));
     }
     controller.enqueue("data: [DONE]" + delimiter);
+  }
+}
+
+// URL validation for security - prevent SSRF attacks
+const isValidProxyUrl = (url) => {
+  try {
+    const parsedUrl = new URL(url);
+    // Only allow HTTP and HTTPS protocols
+    if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
+      return false;
+    }
+    // Prevent localhost and private IP ranges
+    const hostname = parsedUrl.hostname.toLowerCase();
+    if (hostname === 'localhost' ||
+        hostname === '127.0.0.1' ||
+        hostname.startsWith('192.168.') ||
+        hostname.startsWith('10.') ||
+        hostname.startsWith('172.16.') ||
+        hostname.startsWith('172.17.') ||
+        hostname.startsWith('172.18.') ||
+        hostname.startsWith('172.19.') ||
+        hostname.startsWith('172.2') ||
+        hostname.startsWith('172.30.') ||
+        hostname.startsWith('172.31.') ||
+        hostname === '0.0.0.0' ||
+        hostname.includes('..')) {
+      return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+// Filter headers to avoid forwarding sensitive information
+const filterRequestHeaders = (headers) => {
+  const filteredHeaders = new Headers();
+  const allowedHeaders = [
+    'accept',
+    'accept-encoding',
+    'accept-language',
+    'authorization',
+    'cache-control',
+    'content-length',
+    'content-type',
+    'cookie',
+    'user-agent',
+    'x-requested-with'
+  ];
+
+  for (const [key, value] of headers) {
+    const lowerKey = key.toLowerCase();
+    if (allowedHeaders.includes(lowerKey)) {
+      filteredHeaders.set(key, value);
+    }
+  }
+
+  return filteredHeaders;
+};
+
+// URL mapping table for proxy routes
+const URL_MAPPING = {
+  google: 'https://www.google.com',
+  github: 'https://api.github.com',
+  httpbin: 'https://httpbin.org',
+  example: 'https://example.com',
+  jsonplaceholder: 'https://jsonplaceholder.typicode.com'
+};
+
+async function handleProxy(request, apiKey) {
+  const url = new URL(request.url);
+  const pathSegments = url.pathname.split('/').filter(segment => segment !== '');
+
+  // Check if this is the new path-based format: /proxy/{mapping_key}/{path}
+  if (pathSegments.length >= 2 && pathSegments[0] === 'proxy') {
+    const mappingKey = pathSegments[1];
+    const targetPath = pathSegments.slice(2).join('/');
+
+    // Get base URL from mapping table
+    const baseUrl = URL_MAPPING[mappingKey];
+    if (!baseUrl) {
+      throw new HttpError(`Invalid mapping key: ${mappingKey}. Available keys: ${Object.keys(URL_MAPPING).join(', ')}`, 400);
+    }
+
+    // Construct target URL
+    let targetUrl = baseUrl;
+    if (targetPath) {
+      targetUrl += '/' + targetPath;
+    }
+    if (url.search) {
+      targetUrl += url.search;
+    }
+
+    // Validate constructed URL for security
+    if (!isValidProxyUrl(targetUrl)) {
+      throw new HttpError("Invalid or forbidden target URL", 400);
+    }
+
+    return forwardRequest(request, targetUrl);
+  }
+
+  // Legacy support: Get target URL from query parameter
+  const targetUrl = url.searchParams.get('url');
+  if (!targetUrl) {
+    throw new HttpError("Missing target URL parameter or invalid proxy path format. Use /proxy/{key}/{path} or /proxy?url={url}", 400);
+  }
+
+  // Validate target URL for security
+  if (!isValidProxyUrl(targetUrl)) {
+    throw new HttpError("Invalid or forbidden target URL", 400);
+  }
+
+  return forwardRequest(request, targetUrl);
+}
+
+// Helper function to forward request to target URL
+async function forwardRequest(request, targetUrl) {
+  try {
+    // Filter headers to avoid forwarding sensitive Cloudflare headers
+    const filteredHeaders = filterRequestHeaders(request.headers);
+
+    // Create proxy request
+    const proxyRequest = new Request(targetUrl, {
+      method: request.method,
+      headers: filteredHeaders,
+      body: request.method !== 'GET' && request.method !== 'HEAD' ? request.body : null
+    });
+
+    // Forward the request to target server
+    const response = await fetch(proxyRequest);
+
+    // Create response with proper CORS headers
+    const proxyResponse = new Response(response.body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: response.headers
+    });
+
+    return new Response(proxyResponse.body, fixCors(proxyResponse));
+
+  } catch (error) {
+    console.error("Proxy error:", error);
+    throw new HttpError(`Proxy request failed: ${error.message}`, 502);
   }
 }
