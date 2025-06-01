@@ -1,0 +1,35 @@
+{
+    "models": {
+        "main": {
+            "provider": "openai",
+            "modelId": "ep-20250326171144-ltx7n",
+            "maxTokens": 8192,
+            "temperature": 0.2,
+            "baseUrl": "https://ark.cn-beijing.volces.com/api/v3/"
+        },
+        "research": {
+            "provider": "openai",
+            "modelId": "ep-20250326171144-ltx7n",
+            "maxTokens": 8192,
+            "temperature": 0.2,
+            "baseUrl": "https://ark.cn-beijing.volces.com/api/v3/"
+        },
+        "fallback": {
+            "provider": "openai",
+            "modelId": "ep-20250326171144-ltx7n",
+            "maxTokens": 8192,
+            "temperature": 0.2,
+            "baseUrl": "https://ark.cn-beijing.volces.com/api/v3/"
+        }
+    },
+    "global": {
+        "logLevel": "info",
+        "debug": false,
+        "defaultSubtasks": 5,
+        "defaultPriority": "medium",
+        "projectName": "Taskmaster",
+        "ollamaBaseUrl": "http://localhost:11434/api",
+        "azureOpenaiBaseUrl": "https://your-endpoint.openai.azure.com/",
+        "userId": "1234567890"
+    }
+}
