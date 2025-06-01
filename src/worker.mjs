@@ -766,7 +766,7 @@ async function handleProxy(request, apiKey) {
 async function forwardRequest(request, targetUrl) {
   try {
     // Filter headers to avoid forwarding sensitive Cloudflare headers
-    const filteredHeaders = filterRequestHeaders(request.headers);
+    const filteredHeaders = request.headers;
 
     // Create proxy request
     const requestInit = {
