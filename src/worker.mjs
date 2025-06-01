@@ -708,7 +708,7 @@ const filterRequestHeaders = (headers) => {
 
 // URL mapping table for proxy routes
 const URL_MAPPING = {
-  google: 'https://www.google.com',
+  google: 'https://generativelanguage.googleapis.com',
   github: 'https://api.github.com',
   httpbin: 'https://httpbin.org',
   example: 'https://example.com',
@@ -738,6 +738,7 @@ async function handleProxy(request, apiKey) {
     if (url.search) {
       targetUrl += url.search;
     }
+    console.log("🚀   ~ targetUrl:", targetUrl);
 
     // Validate constructed URL for security
     if (!isValidProxyUrl(targetUrl)) {
